@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
+import { sendError } from '../utils/apiResponse';
 
 /**
  * Reads the result of express-validator checks that were run before this
@@ -8,11 +9,11 @@ import { validationResult } from 'express-validator';
 const validateRequest = (req: Request, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    res.status(422).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array(),
-    });
+    const details = errors
+      .array()
+      .map((error) => `${error.type === 'field' ? error.path : 'request'}: ${error.msg}`)
+      .join('; ');
+    sendError(res, 'Validation failed', 422, 'VALIDATION_FAILED', details);
     return;
   }
   next();

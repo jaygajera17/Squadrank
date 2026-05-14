@@ -8,11 +8,24 @@ export interface AppError extends Error {
   details?: string;
 }
 
-const toErrorCode = (message: string): string =>
-  message
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'INTERNAL_SERVER_ERROR';
+const statusCodeToDefaultErrorCode = (statusCode: number): string => {
+  switch (statusCode) {
+    case 400:
+      return 'BAD_REQUEST';
+    case 401:
+      return 'UNAUTHORIZED';
+    case 403:
+      return 'FORBIDDEN';
+    case 404:
+      return 'NOT_FOUND';
+    case 409:
+      return 'CONFLICT';
+    case 422:
+      return 'VALIDATION_FAILED';
+    default:
+      return 'INTERNAL_SERVER_ERROR';
+  }
+};
 
 /**
  * Catches requests to undefined routes.
@@ -38,6 +51,7 @@ export const errorHandler = (
   const message = err.message ?? 'Internal Server Error';
   const details =
     err.details ?? (process.env.NODE_ENV === 'development' ? err.stack : undefined);
+  const code = err.code ?? statusCodeToDefaultErrorCode(statusCode);
 
-  sendError(res, message, statusCode, err.code ?? toErrorCode(message), details);
+  sendError(res, message, statusCode, code, details);
 };

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { sendError } from '../utils/apiResponse';
 
 export interface AuthenticatedRequest extends Request {
   user?: { id: string; role: string };
@@ -17,7 +18,7 @@ export const authenticate = (
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
-    res.status(401).json({ success: false, message: 'Unauthorized — no token provided' });
+    sendError(res, 'Unauthorized — no token provided', 401, 'UNAUTHORIZED_NO_TOKEN');
     return;
   }
 
@@ -25,7 +26,7 @@ export const authenticate = (
   const secret = process.env.JWT_SECRET;
 
   if (!secret) {
-    res.status(500).json({ success: false, message: 'JWT secret is not configured' });
+    sendError(res, 'JWT secret is not configured', 500, 'JWT_SECRET_NOT_CONFIGURED');
     return;
   }
 
@@ -34,7 +35,7 @@ export const authenticate = (
     req.user = decoded;
     next();
   } catch {
-    res.status(401).json({ success: false, message: 'Unauthorized — invalid or expired token' });
+    sendError(res, 'Unauthorized — invalid or expired token', 401, 'UNAUTHORIZED_INVALID_TOKEN');
   }
 };
 
@@ -46,10 +47,12 @@ export const authorize =
   (...roles: string[]) =>
   (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user || !roles.includes(req.user.role)) {
-      res.status(403).json({
-        success: false,
-        message: 'Forbidden — you do not have permission to perform this action',
-      });
+      sendError(
+        res,
+        'Forbidden — you do not have permission to perform this action',
+        403,
+        'FORBIDDEN',
+      );
       return;
     }
     next();

@@ -12,6 +12,10 @@ export const apiLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many requests — please try again later',
+    data: null,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+    },
   },
 });
 
@@ -27,5 +31,9 @@ export const authLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many requests — please try again later',
+    data: null,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+    },
   },
 });
