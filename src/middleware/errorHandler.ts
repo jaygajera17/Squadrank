@@ -1,9 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
+import { sendError } from '../utils/apiResponse';
 
 export interface AppError extends Error {
   statusCode?: number;
   isOperational?: boolean;
+  code?: string;
+  details?: string;
 }
+
+const toErrorCode = (message: string): string =>
+  message
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'INTERNAL_SERVER_ERROR';
 
 /**
  * Catches requests to undefined routes.
@@ -27,10 +36,8 @@ export const errorHandler = (
 ): void => {
   const statusCode = err.statusCode ?? 500;
   const message = err.message ?? 'Internal Server Error';
+  const details =
+    err.details ?? (process.env.NODE_ENV === 'development' ? err.stack : undefined);
 
-  res.status(statusCode).json({
-    success: false,
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
+  sendError(res, message, statusCode, err.code ?? toErrorCode(message), details);
 };
