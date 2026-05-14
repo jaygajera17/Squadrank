@@ -20,6 +20,7 @@ const UserSchema: Schema<IUser> = new Schema(
       type: String,
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
+      // Exclude password from query results by default for security
       select: false,
     },
     role: {

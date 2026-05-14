@@ -5,6 +5,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import connectDB from './src/utils/db';
 import router from './src/routes';
+import { apiLimiter } from './src/utils/rateLimiter';
 import { errorHandler, notFound } from './src/middleware/errorHandler';
 
 const app: Application = express();
@@ -13,6 +14,9 @@ const app: Application = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+app.use('/api', apiLimiter);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api', router);

@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import userController from '../controllers/user.controller';
 import validateRequest from '../middleware/validateRequest';
 import { authenticate, authorize } from '../middleware/auth';
+import { authLimiter } from '../utils/rateLimiter';
 
 const router = Router();
 
@@ -35,9 +36,9 @@ const updateUserValidation = [
 /**
  * @route   POST /api/users
  * @desc    Register a new user (role defaults to "user")
- * @access  Public
+ * @access  Public (rate-limited)
  */
-router.post('/', createUserValidation, validateRequest, userController.createUser);
+router.post('/', authLimiter, createUserValidation, validateRequest, userController.createUser);
 
 /**
  * @route   GET /api/users
