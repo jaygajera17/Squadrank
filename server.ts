@@ -1,12 +1,10 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
 import express, { Application } from 'express';
 import cors from 'cors';
 import connectDB from './src/utils/db';
 import router from './src/routes';
 import { apiLimiter } from './src/utils/rateLimiter';
 import { errorHandler, notFound } from './src/middleware/errorHandler';
+import { PORT } from './src/config/secrets';
 
 const app: Application = express();
 
@@ -26,12 +24,11 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT ?? 5000;
 
 const startServer = async (): Promise<void> => {
   await connectDB();
   app.listen(PORT, () => {
-    console.log(`🚀 Server running in ${process.env.NODE_ENV ?? 'development'} mode on port ${PORT}`);
+    console.log(`Server running in ${process.env.NODE_ENV ?? 'development'} mode on port ${PORT}`);
   });
 };
 

@@ -1,26 +1,33 @@
-import mongoose from 'mongoose';
-import User from '../models/user.model';
-import { IUser, ICreateUserDTO, IUpdateUserDTO } from '../interface/user.interface';
-
-/** Reusable helper to create a typed operational error. */
-const makeError = (message: string, statusCode: number): Error & { statusCode: number } => {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-};
+import User from "../models/user.model";
+import { IUpdateUserDTO, IUser } from "../interface/user.interface";
 
 class UserService {
 
-  /**
-   * Return all users (password field excluded).
-   */
+  async createUser(userData: { googleId: string; email: string; name: string; avatar: string }) {
+    return User.create(userData);
+  }
   async getAllUsers(): Promise<IUser[]> {
-    return User.find().select('-password');
+    return User.find().select("-password");
   }
 
-  
+  async getUserByEmail(email: string) {
+    return User.findOne({ email });
+  }
 
- 
+  async getUserById(id: string) {
+    return User.findById(id);
+  }
+
+  async updateUser(userId:string, updateData: IUpdateUserDTO) {
+    return User.findByIdAndUpdate(userId, updateData, { new: true });
+  }
+
+  async getUserIdsByEmails(emails:string[]){
+    const users = await User.find({
+      email: { $in: emails }
+    }).select('_id');
+    return users.map(user => user._id.toString());
+  }
 }
 
 export default new UserService();
