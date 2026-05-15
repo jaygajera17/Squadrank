@@ -1,0 +1,2 @@
+## Assumption
+- Creator of the group should be added to the members list by default. This way, when a group is created, the creator will automatically be a member of that group without needing to be added separately.
