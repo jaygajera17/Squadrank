@@ -1,7 +1,5 @@
-import userController from '@/controllers/user.controller';
-import { authenticate } from '@/middleware/auth';
+import userController from '../controllers/user.controller';
 import { Router } from 'express';
-
 class UserRouter {
   public router: Router = Router();
 
@@ -12,10 +10,14 @@ class UserRouter {
   private initializeRoutes() {
     this.router.get(
       '/',
-      authenticate,
       userController.getAllUsers,
     );
+
+
   }
+
+  
+
 }
 
 
