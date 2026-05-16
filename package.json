@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --inspect --respawn --transpile-only server.ts",
+    "seed": "ts-node-dev --transpile-only --exit-child src/scripts/seed.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "lint": "eslint . --ext .ts"
