@@ -9,6 +9,7 @@ import {
   createGroupValidator,
   getGroupProgressValidator,
 } from "../middleware/validator/group.validator";
+import leaderboardController from "../controllers/leaderboard.controller";
 
 class GroupRouter {
   public router: Router = Router();
@@ -50,6 +51,12 @@ class GroupRouter {
       authMiddleware,
       getGroupProgressValidator,
       groupController.getGroupProgress,
+    );
+
+    this.router.get(
+      "/:groupId/leaderboard",
+      authMiddleware,
+      leaderboardController.getLeaderboard,
     );
   }
 }

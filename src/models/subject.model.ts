@@ -7,7 +7,6 @@ const SubjectSchema = new Schema({
   createdAt:   { type: Date, default: Date.now }
 });
 
-SubjectSchema.index({ name: 1 }, { collation: { locale: "en", strength: 2 } });
 const Subject = mongoose.model("Subject", SubjectSchema);
 export default Subject;
 
