@@ -2,7 +2,6 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import connectDB from './src/utils/db';
 import router from './src/routes';
-import { apiLimiter } from './src/utils/rateLimiter';
 import { globalErrorHandler } from './src/middleware/errorHandler';
 import { PORT } from './src/config/secrets';
 import { connectRedis } from './src/config/redis';
@@ -14,11 +13,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// -- Rate Limiting --
-app.use('/api', apiLimiter);
 
 // -- Routes --
 app.use('/api', router);
+
+app.get("/",(req, res) => {
+  res.send("Welcome to Squadrank API");
+});
 
 // -- 404 + Error Handlers --
 app.use(globalErrorHandler);
