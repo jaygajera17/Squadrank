@@ -91,6 +91,15 @@ export const addGroupMemberValidator: RequestHandler[] = [
         });
       }
 
+      const isMember = group.members.some((m) => m.toString() === req.user?.id);
+      if (!isMember) {
+        return Promise.reject({
+          message: "you are not a member of this group",
+          code: "NOT_A_MEMBER",
+          statusCode: 403,
+        });
+      }
+
       if (!req.user?.id || group.creatorId.toString() !== req.user.id) {
         return Promise.reject({
           message: "only the creator can add members",

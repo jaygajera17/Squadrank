@@ -23,7 +23,7 @@ const GroupGoalSchema = new Schema({
   deadline: { type: Date, default: null }, // null for recurring goals
   frequency: {
     type: String,
-    enum: ["daily", "weekly", "monthly"],
+    enum: ["daily", "weekly", "monthly",null],
     default: null, // null for deadline
   },
   questionsSolved: { type: Number, default: 0 }, // incremented on each valid activity
@@ -31,6 +31,7 @@ const GroupGoalSchema = new Schema({
   status: { type: String, enum: ["active", "archived"], default: "active" },
   createdAt: { type: Date, default: Date.now },
 });
+GroupGoalSchema.index({ groupId: 1, status: 1 });
 
 const GroupGoal = mongoose.model("GroupGoal", GroupGoalSchema);
 export default GroupGoal;

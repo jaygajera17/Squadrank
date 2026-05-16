@@ -57,10 +57,10 @@ class GroupService {
       subjectIds: goalData.subjectIds,
       metric: goalData.metric,
       targetCount: goalData.targetCount,
+      totalQuestions: goalData.totalQuestions ?? goalData.totalQuestions,
       goalType: goalData.goalType,
       deadline: normalizedDeadline,
       frequency: normalizedFrequency,
-      totalQuestions: goalData.totalQuestions,
       ...(goalData.startDate && { startDate: goalData.startDate }),
     });
 
@@ -113,7 +113,7 @@ class GroupService {
           _id: "$userId",
           solved: {
             $sum: {
-              $cond: [{ $eq: ["$status", "solved"] }, 1, 0],
+              $cond: [{ $eq: ["$status", ["solved","correct"]] }, 1, 0],
             },
           },
           totalTimeSpent: { $sum: "$timeSpent" },

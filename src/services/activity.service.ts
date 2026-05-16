@@ -148,7 +148,7 @@ class ActivityService {
         !goal.lastResetAt || goal.lastResetAt < windowStart;
       if (periodRolledOver) {
         await GroupGoal.findByIdAndUpdate(goal._id, {
-          $set: { progress: 0, lastResetAt: windowStart },
+          $set: { questionsSolved: 0, lastResetAt: windowStart },
         });
       }
     }
@@ -158,6 +158,7 @@ class ActivityService {
       goalId: goal._id,
       userId,
       questionId,
+      countedTowardsGoal: true,
     })
       .select("_id")
       .lean();
@@ -179,8 +180,8 @@ class ActivityService {
     });
 
     //8. Update goal progress atomically
-    const updatedGoal = await GroupGoal.findByIdAndUpdate(
-      goal._id,
+    const updatedGoal = await GroupGoal.findOneAndUpdate(
+      { _id: goal._id, questionsSolved: { $lt: goal.totalQuestions } },
       { $inc: { questionsSolved: 1 } },
       { new: true },
     );

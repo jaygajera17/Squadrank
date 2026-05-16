@@ -46,12 +46,15 @@ const GroupMemberActivitySchema = new Schema({
   },
 });
 
-GroupMemberActivitySchema.index({
-  goalId: 1,
-  userId: 1,
-  countedTowardsGoal: 1,
-  activityDate: 1,
-});
+GroupMemberActivitySchema.index(
+  { goalId: 1, userId: 1, questionId: 1 },
+  { partialFilterExpression: { countedTowardsGoal: true } }
+);
+
+GroupMemberActivitySchema.index({ goalId: 1, subjectId: 1, activityDate: 1 });
+
+GroupMemberActivitySchema.index({ goalId: 1, userId: 1, countedTowardsGoal: 1, activityDate: 1 });
+
 
 const GroupMemberActivity = mongoose.model(
   "GroupMemberActivity",

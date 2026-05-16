@@ -120,7 +120,7 @@ class LeaderboardService {
                 _id: "$userId",
                 questionsSolved: {
                   $sum: {
-                    $cond: [{ $eq: ["$status", "solved"] }, 1, 0],
+                    $cond: [{ $eq: ["$status", ["solved","correct"]] }, 1, 0],
                   },
                 },
                 timeSpent: { $sum: "$timeSpent" },
