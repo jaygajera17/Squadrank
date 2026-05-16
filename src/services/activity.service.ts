@@ -5,6 +5,7 @@ import Question from "../models/question.model";
 import { getEffectiveWindow } from "../utils/timeWindow";
 
 class ActivityService {
+  //@ts-ignore
   async saveAndRespond(activityData, counted, responseMeta = {}) {
     try {
       const activity = await GroupMemberActivity.create(activityData);

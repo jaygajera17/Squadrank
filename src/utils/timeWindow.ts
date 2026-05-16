@@ -1,3 +1,5 @@
+//@ts-ignore
+
 export function getEffectiveWindow(goal) {
   if (goal.goalType === "deadline") {
     return {
@@ -44,6 +46,7 @@ export function getEffectiveWindow(goal) {
   throw new Error("Invalid goal frequency");
 }
 
+//@ts-ignore
 export function resolveDateRange(timeWindow, goal) {
   const now = new Date();
 
