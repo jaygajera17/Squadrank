@@ -14,17 +14,37 @@ if (!mongoUri) {
 if (!JWT) {
   throw new Error("JWT_SECRET is not defined in environment variables");
 }
-if(!clientId || !clientSecret){
-  throw new Error("CLIENT_ID and CLIENT_SECRET are not defined in environment variables");
+if (!clientId || !clientSecret) {
+  throw new Error(
+    "CLIENT_ID and CLIENT_SECRET are not defined in environment variables",
+  );
 }
-if(!googleRedirectUri){
-  throw new Error("GOOGLE_REDIRECT_URI is not defined in environment variables");
+if (!googleRedirectUri) {
+  throw new Error(
+    "GOOGLE_REDIRECT_URI is not defined in environment variables",
+  );
 }
 
-export const MONGO_URI: string = mongoUri;
-export const PORT: string = port;
-export const NODE_ENV: string = nodeEnv;
-export const JWT_SECRET: string = JWT;
-export const GOOGLE_CLIENT_ID: string = clientId;
-export const GOOGLE_CLIENT_SECRET: string = clientSecret;
-export const GOOGLE_REDIRECT_URI: string = googleRedirectUri;
+const SECRETS = Object.freeze({
+  MONGO_URI: mongoUri,
+  PORT: port,
+  NODE_ENV: nodeEnv,
+  JWT_SECRET: JWT,
+  GOOGLE_CLIENT_ID: clientId,
+  GOOGLE_CLIENT_SECRET: clientSecret,
+  GOOGLE_REDIRECT_URI: googleRedirectUri,
+  UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || "",
+  UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || "",
+} as const);
+
+export const {
+  MONGO_URI,
+  PORT,
+  NODE_ENV,
+  JWT_SECRET,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI,
+  UPSTASH_REDIS_REST_URL,
+  UPSTASH_REDIS_REST_TOKEN,
+} = SECRETS;

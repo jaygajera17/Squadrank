@@ -16,6 +16,7 @@ export interface ICreateGroupDTO {
 export interface IAddGroupGoalDTO {
   title: string;
   subjectIds: string[];
+  totalQuestions: number;
   metric?: "questionsSolved" | "timeSpent";
   targetCount: number;
   goalType: "deadline" | "recurring";

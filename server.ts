@@ -3,27 +3,30 @@ import cors from 'cors';
 import connectDB from './src/utils/db';
 import router from './src/routes';
 import { apiLimiter } from './src/utils/rateLimiter';
-import { errorHandler, notFound } from './src/middleware/errorHandler';
+import { globalErrorHandler } from './src/middleware/errorHandler';
 import { PORT } from './src/config/secrets';
+import { connectRedis } from './src/config/redis';
 
 const app: Application = express();
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
+// -- Middleware --
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Rate Limiting ────────────────────────────────────────────────────────────
+// -- Rate Limiting --
 app.use('/api', apiLimiter);
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+// -- Routes --
 app.use('/api', router);
 
-// ─── 404 + Error Handlers ─────────────────────────────────────────────────────
-app.use(notFound);
-app.use(errorHandler);
+// -- 404 + Error Handlers --
+app.use(globalErrorHandler);
 
-// ─── Start Server ─────────────────────────────────────────────────────────────
+// Redis connection
+connectRedis();
+
+
 
 const startServer = async (): Promise<void> => {
   await connectDB();

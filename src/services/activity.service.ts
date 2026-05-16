@@ -2,13 +2,27 @@ import { IAddGroupMemberActivityDTO } from "../interface/group.interface";
 import GroupGoal from "../models/groupGoal.model";
 import GroupMemberActivity from "../models/groupMemberActivity.model";
 import Question from "../models/question.model";
+import { AppError } from "../utils/appError";
 import { getEffectiveWindow } from "../utils/timeWindow";
+import { invalidateGoalCache } from "../utils/leaderBoard";
+import { redisClient } from "../config/redis";
 
 class ActivityService {
+  private async invalidateCaches(goalId: string) {
+    if (!redisClient) {
+      return;
+    }
+    await invalidateGoalCache(redisClient, goalId);
+    await redisClient.del(`progress:${goalId}`);
+  }
+
   //@ts-ignore
   async saveAndRespond(activityData, counted, responseMeta = {}) {
     try {
       const activity = await GroupMemberActivity.create(activityData);
+      if (activityData.goalId) {
+        await this.invalidateCaches(String(activityData.goalId));
+      }
       return {
         activityId: activity._id,
         counted,
@@ -18,19 +32,12 @@ class ActivityService {
     } catch (error) {
       const errorCode = (error as { code?: number } | undefined)?.code;
       if (errorCode === 11000) {
-        const existing = await GroupMemberActivity.findOne({
-          goalId: activityData.goalId ?? null,
-          userId: activityData.userId,
-          questionId: activityData.questionId,
-        })
-          .select("_id")
-          .lean();
-        return {
-          activityId: existing?._id,
-          counted: false,
-          reason: "duplicate",
-          ...responseMeta,
-        };
+        throw new AppError(
+          "DUPLICATE_ACTIVITY",
+          "Duplicate activity",
+          409,
+          `User ${String(activityData.userId)} already has activity for question ${String(activityData.questionId)}.`,
+        );
       }
       throw error;
     }
@@ -42,7 +49,12 @@ class ActivityService {
 
     const question = await Question.findById(questionId).lean();
     if (!question) {
-      throw new Error("Question not found");
+      throw new AppError(
+        "QUESTION_NOT_FOUND",
+        "Question not found",
+        404,
+        `Question id ${String(questionId)} does not exist.`,
+      );
     }
 
     const responseMeta = {
@@ -173,6 +185,7 @@ class ActivityService {
       { new: true },
     );
 
+    await this.invalidateCaches(String(goal._id));
 
     return {
       activityId: data._id,

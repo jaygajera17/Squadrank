@@ -2,11 +2,17 @@ import mongoose from "mongoose";
 import { IGetLeaderBoard } from "../interface/leadeboard.interface";
 import GroupGoal from "../models/groupGoal.model";
 import { resolveDateRange } from "../utils/timeWindow";
-import { resolveRankField, resolveSortField } from "../utils/leaderBoard";
+import {
+  buildCacheKey,
+  resolveCacheTTL,
+  resolveRankField,
+  resolveSortField,
+} from "../utils/leaderBoard";
 import StudyGroup from "../models/studyGroup.model";
+import { AppError } from "../utils/appError";
+import { redisClient } from "../config/redis";
 
 class LeaderboardService {
-
   async getLeaderboard(data: IGetLeaderBoard) {
     const {
       groupId,
@@ -21,14 +27,17 @@ class LeaderboardService {
     } = data;
     const goal = await GroupGoal.findOne({ groupId, status: "active" }).lean();
     if (!goal) {
-      throw new Error(
+      throw new AppError(
+        "ACTIVE_GOAL_NOT_FOUND",
         "No active goal for this group. please ask the group creator to add a new goal",
+        404,
+        `Group id ${String(groupId)} does not have an active goal.`,
       );
     }
 
     // 3. Subject filter: ignored for single-subject goal
-    const isMultiSubject = Array.isArray(goal.subjectIds) &&
-      goal.subjectIds.length > 1;
+    const isMultiSubject =
+      Array.isArray(goal.subjectIds) && goal.subjectIds.length > 1;
     const goalSubjectSet = new Set(
       (goal.subjectIds ?? []).map((id) => id.toString()),
     );
@@ -40,6 +49,15 @@ class LeaderboardService {
         ? filteredSubjectIds.map((s) => new mongoose.Types.ObjectId(s))
         : null;
 
+    //cache check
+    const cacheKey = buildCacheKey(String(goal._id), data);
+    if (redisClient) {
+      const cachedData = await redisClient.get<string>(cacheKey);
+      if (typeof cachedData === "string" && cachedData.length > 0) {
+        return JSON.parse(cachedData);
+      }
+    }
+
     const dateRange = resolveDateRange(timeWindow, goal);
 
     const rankField = resolveRankField(metric);
@@ -48,21 +66,24 @@ class LeaderboardService {
     const groupObjectId = new mongoose.Types.ObjectId(groupId);
     const safeOffset = Math.max(offset ?? 0, 0);
     const safeLimit = Math.max(Math.min(limit ?? 10, 50), 1);
-    const goalValues = goal as { totalQuestions?: number; targetCount?: number };
-    const goalTarget = Number(goalValues.totalQuestions ?? goalValues.targetCount ?? 0);
-    const percentageExpr = goalTarget > 0
-      ? {
-          $round: [
-            {
-              $multiply: [
-                { $divide: ["$questionsSolved", goalTarget] },
-                100,
-              ],
-            },
-            2,
-          ],
-        }
-      : 0;
+    const goalValues = goal as {
+      totalQuestions?: number;
+      targetCount?: number;
+    };
+    const goalTarget = Number(
+      goalValues.totalQuestions ?? goalValues.targetCount ?? 0,
+    );
+    const percentageExpr =
+      goalTarget > 0
+        ? {
+            $round: [
+              {
+                $multiply: [{ $divide: ["$questionsSolved", goalTarget] }, 100],
+              },
+              2,
+            ],
+          }
+        : 0;
 
     const pipeline = await StudyGroup.aggregate([
       { $match: { _id: groupObjectId } },
@@ -195,7 +216,7 @@ class LeaderboardService {
           timeSpent: result.currentUser[0].timeSpent,
         }
       : null;
-    return {
+    const response = {
       goalId: String(goal._id),
       totalMembers,
       leaderboard,
@@ -203,9 +224,17 @@ class LeaderboardService {
       offset: safeOffset,
       limit: safeLimit,
     };
-  
-}
-
+    if (redisClient) {
+      const ttl = resolveCacheTTL(goal);
+      if (ttl > 0) {
+        const cacheSetKey = `leaderboard:keys:${String(goal._id)}`;
+        await redisClient.set(cacheKey, JSON.stringify(response), { ex: ttl });
+        await redisClient.sadd(cacheSetKey, cacheKey);
+        await redisClient.expire(cacheSetKey, ttl);
+      }
+    }
+    return response;
+  }
 }
 
 export default new LeaderboardService();
