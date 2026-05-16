@@ -8,6 +8,9 @@ import {
 import GroupMemberActivity from "../models/groupMemberActivity.model";
 import Subject from "../models/subject.model";
 import mongoose from "mongoose";
+import { AppError } from "../utils/appError";
+import { resolveCacheTTL } from "../utils/leaderBoard";
+import { redisClient } from "../config/redis";
 
 class GroupService {
   /**
@@ -57,6 +60,7 @@ class GroupService {
       goalType: goalData.goalType,
       deadline: normalizedDeadline,
       frequency: normalizedFrequency,
+      totalQuestions: goalData.totalQuestions,
       ...(goalData.startDate && { startDate: goalData.startDate }),
     });
 
@@ -69,7 +73,20 @@ class GroupService {
   async getGroupProgress(groupId: string) {
     const goal = await GroupGoal.findOne({ groupId, status: "active" }).lean();
     if (!goal) {
-      throw new Error("No active goal found for the group");
+      throw new AppError(
+        "ACTIVE_GOAL_NOT_FOUND",
+        "No active goal found for the group",
+        404,
+        `Group id ${String(groupId)} does not have an active goal.`,
+      );
+    }
+
+    const cacheKey = `progress:${String(goal._id)}`;
+    if (redisClient) {
+      const cachedProgress = await redisClient.get<string>(cacheKey);
+      if (typeof cachedProgress === "string" && cachedProgress.length > 0) {
+        return JSON.parse(cachedProgress);
+      }
     }
 
     const subjectNames = (
@@ -128,7 +145,7 @@ class GroupService {
       },
     ]);
 
-    return {
+    const response = {
       goalId: goal._id,
       title: goal.title,
       metric: goal.metric,
@@ -141,6 +158,13 @@ class GroupService {
           : 0,
       perMemberProgress,
     };
+    if (redisClient) {
+      const ttl = resolveCacheTTL(goal);
+      if (ttl > 0) {
+        await redisClient.set(cacheKey, JSON.stringify(response), { ex: ttl });
+      }
+    }
+    return response;
   }
 }
 

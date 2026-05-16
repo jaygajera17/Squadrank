@@ -1,36 +1,30 @@
-import { Request, Response, NextFunction } from 'express';
+import { sendError } from "../utils/apiResponse";
+import { Request, Response, NextFunction } from "express";
+import { AppError } from "../utils/appError";
 
-export interface AppError extends Error {
-  statusCode?: number;
-  isOperational?: boolean;
+export function globalErrorHandler(
+  err: unknown,
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  // Known, expected errors thrown from services
+  if (err instanceof AppError) {
+    sendError(res, err.message, err.statusCode, err.code, err.details);
+    return;
+  }
+
+  // MongoDB duplicate key (shouldn't reach here normally, but safety net)
+  if (isMongoError(err) && err.code === 11000) {
+    sendError(res, "Duplicate entry", 409, "DUPLICATE_KEY");
+    return;
+  }
+
+  // Unknown/unexpected errors — don't leak internals
+  console.error("[Unhandled Error]", err);
+  sendError(res, "Internal Server Error", 500, "INTERNAL_SERVER_ERROR");
 }
 
-/**
- * Catches requests to undefined routes.
- */
-export const notFound = (req: Request, _res: Response, next: NextFunction): void => {
-  const error: AppError = new Error(`Route not found — ${req.originalUrl}`);
-  error.statusCode = 404;
-  next(error);
-};
-
-/**
- * Central error-handling middleware.
- * Express recognises a 4-argument middleware as an error handler.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const errorHandler = (
-  err: AppError,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
-): void => {
-  const statusCode = err.statusCode ?? 500;
-  const message = err.message ?? 'Internal Server Error';
-
-  res.status(statusCode).json({
-    success: false,
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
-};
+function isMongoError(err: unknown): err is { code: number; message: string } {
+  return typeof err === "object" && err !== null && "code" in err;
+}
