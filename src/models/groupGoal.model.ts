@@ -16,19 +16,21 @@ const GroupGoalSchema = new Schema({
     enum: ["questionsSolved", "timeSpent"],
     default: "questionsSolved",
   },
-  targetCount: { type: Number, required: true }, // e.g. 100
+  totalQuestions: { type: Number, required: true }, // e.g. 100
 
   goalType: { type: String, enum: ["deadline", "recurring"], required: true },
   startDate: { type: Date, required: true, default: Date.now },
-  deadline: { type: Date, default: null }, // for goalType: "deadline"
+  deadline: { type: Date, default: null }, // null for recurring goals
   frequency: {
     type: String,
-    enum: ["daily", "weekly", "monthly", null],
-    default: null, // for goalType: "recurring"
+    enum: ["daily", "weekly", "monthly"],
+    default: null, // null for deadline
   },
-
+  questionsSolved: { type: Number, default: 0 }, // incremented on each valid activity
+  lastResetAt: { type: Date, default: null }, // only for recurring — tracks when progress last reset
   status: { type: String, enum: ["active", "archived"], default: "active" },
   createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("GroupGoal", GroupGoalSchema);
+const GroupGoal = mongoose.model("GroupGoal", GroupGoalSchema);
+export default GroupGoal;

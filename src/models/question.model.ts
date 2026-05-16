@@ -15,4 +15,5 @@ QuestionSchema.index({ subjectId: 1, difficulty: 1 });
 
 QuestionSchema.index({ subjectId: 1, topic: 1 });
 
-module.exports = mongoose.model("Question", QuestionSchema);
+const Question = mongoose.model("Question", QuestionSchema);
+export default Question;

@@ -21,7 +21,6 @@ export const authMiddleware = async (
       const decodedAccessToken = jwt.verify(accessToken, JWT_SECRET, {
         algorithms: ["HS256"],
       }) as { id: string };
-
       // Check if user exists in the database
       const user = await userService.getUserById(decodedAccessToken.id);
 

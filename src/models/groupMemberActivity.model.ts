@@ -1,24 +1,55 @@
-
-import mongoose, { Schema } from 'mongoose';
-
+import mongoose, { Schema } from "mongoose";
 
 const GroupMemberActivitySchema = new Schema({
-  groupId:    { type: mongoose.Schema.Types.ObjectId, ref: "StudyGroup", required: true },
-  goalId:     { type: mongoose.Schema.Types.ObjectId, ref: "GroupGoal",  required: true },
-  userId:     { type: mongoose.Schema.Types.ObjectId, ref: "User",       required: true },
-  questionId: { type: mongoose.Schema.Types.ObjectId, ref: "Question",   required: true },
-  subjectId:  { type: mongoose.Schema.Types.ObjectId, ref: "Subject",    required: true }, // denormalized from Question
+  groupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "StudyGroup",
+    required: true,
+  },
+  goalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "GroupGoal",
+    default: null,
+  },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  questionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Question",
+    required: true,
+  },
+  subjectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Subject",
+    required: true,
+  }, // denormalized from Question
 
-  status:    { type: String, enum: ["solved", "correct"], required: true },
+  status: {
+    type: String,
+    enum: ["solved", "correct", "attempted"],
+    required: true,
+  },
   timeSpent: { type: Number, required: true }, // in seconds
-  activityDate: { type: Date, required: true, default: Date.now }
+  activityDate: { type: Date, required: true, default: Date.now },
+
+  countedTowardsGoal: { type: Boolean, default: false },
+  notCountedReason: {
+    type: String,
+    enum: [
+      "subject_mismatch",
+      "outside_window",
+      "invalid_status",
+      "duplicate",
+      "no_active_goal",
+      null,
+    ],
+    default: null,
+  },
 });
 
 
-// Dedup check: same user solving same question under same goal
-GroupMemberActivitySchema.index(
-  { goalId: 1, userId: 1, questionId: 1 },
-  { unique: true }   // enforces per-user dedup at DB level
-);
 
-module.exports = mongoose.model("GroupMemberActivity", GroupMemberActivitySchema);
+const GroupMemberActivity = mongoose.model(
+  "GroupMemberActivity",
+  GroupMemberActivitySchema,
+);
+export default GroupMemberActivity;

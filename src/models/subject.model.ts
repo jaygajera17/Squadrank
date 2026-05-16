@@ -8,4 +8,6 @@ const SubjectSchema = new Schema({
 });
 
 SubjectSchema.index({ name: 1 }, { collation: { locale: "en", strength: 2 } });
-module.exports = mongoose.model("Subject", SubjectSchema);
+const Subject = mongoose.model("Subject", SubjectSchema);
+export default Subject;
+

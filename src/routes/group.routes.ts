@@ -4,7 +4,10 @@ import groupController from "../controllers/group.controller";
 import { authMiddleware } from "../middleware/authMiddleware";
 import {
   addGroupMemberValidator,
+  addGroupGoalValidator,
+  addGroupMemberActivityValidator,
   createGroupValidator,
+  getGroupProgressValidator,
 } from "../middleware/validator/group.validator";
 
 class GroupRouter {
@@ -26,6 +29,27 @@ class GroupRouter {
       authMiddleware,
       addGroupMemberValidator,
       groupController.addGroupMember,
+    );
+
+    this.router.post(
+      "/:groupId/goal",
+      authMiddleware,
+      addGroupGoalValidator,
+      groupController.addGroupGoal,
+    );
+
+    this.router.post(
+      "/:groupId/activity",
+      authMiddleware,
+      addGroupMemberActivityValidator,
+      groupController.addGroupMemberActivity,
+    );
+
+    this.router.get(
+      "/:groupId/progress",
+      authMiddleware,
+      getGroupProgressValidator,
+      groupController.getGroupProgress,
     );
   }
 }
