@@ -1,0 +1,1221 @@
+openapi: 3.0.3
+
+info:
+  title: Squadrank API
+  description: |
+    Backend API for **Squadrank** — collaborative study groups with live leaderboards and goal tracking.
+
+    ## Authentication
+    All protected endpoints require a Bearer JWT token in the `Authorization` header.
+    Obtain a token via the Google OAuth login flow:
+    1. Call `GET /api/auth/login` to get the Google redirect URL.
+    2. Complete the OAuth flow in the browser.
+    3. Google redirects to your configured callback URL with a `code` query param.
+    4. Exchange the code at `GET /api/auth/google/callback` — returns `accessToken` and `refreshToken`.
+    5. Pass `Authorization: Bearer <accessToken>` on all subsequent requests.
+
+  version: 1.0.0
+  contact:
+    name: Jay Gajera
+    url: https://github.com/jaygajera17
+
+servers:
+  - url: https://squadrank.vercel.app/api
+    description: Production (Vercel — free tier, cold starts expected)
+  - url: http://localhost:3000/api
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Google OAuth and token management
+  - name: Groups
+    description: Study group creation and membership
+  - name: Goals
+    description: Group goal management
+  - name: Activity
+    description: Member activity submission
+  - name: Leaderboard
+    description: Live leaderboard with filters and pagination
+  - name: Progress
+    description: Group goal progress tracking
+  - name: Users
+    description: User management
+
+# ─── Reusable Components ──────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from the Google OAuth login flow.
+
+  schemas:
+
+    # ── Shared wrappers ──────────────────────────────────────────────────────
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation successful
+        data:
+          description: Endpoint-specific payload.
+        error:
+          type: "null"
+          example: null
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Short description of the error
+        data:
+          type: "null"
+          example: null
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: ERROR_CODE
+            details:
+              type: string
+              example: Optional verbose description
+
+    # ── Domain objects ───────────────────────────────────────────────────────
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6a08ace98aade3c8d2ad4ee6
+        googleId:
+          type: string
+          example: "108200000000000000000"
+        email:
+          type: string
+          example: jay@example.com
+        name:
+          type: string
+          example: Jay Gajera
+        avatar:
+          type: string
+          example: https://lh3.googleusercontent.com/a/photo
+        createdAt:
+          type: string
+          format: date-time
+
+    GroupSummary:
+      type: object
+      properties:
+        groupId:
+          type: string
+          example: 6a08ace98aade3c8d2ad4eea
+        name:
+          type: string
+          example: Morning Problem Solvers
+        creator:
+          type: string
+          format: email
+          example: jay@example.com
+        members:
+          type: array
+          items:
+            type: string
+            format: email
+          example: [jay@example.com, user2@example.com]
+        activeGoal:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+
+    GoalSummary:
+      type: object
+      properties:
+        goalId:
+          type: string
+          example: 6a08ace98aade3c8d2ad5001
+        title:
+          type: string
+          example: Solve 100 Math Questions
+        subject:
+          type: array
+          items:
+            type: string
+          example: [Mathematics, Physics]
+        metric:
+          type: string
+          enum: [questionsSolved, timeSpent]
+          example: questionsSolved
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-09-05T23:59:59Z"
+        progress:
+          type: integer
+          example: 0
+        isActive:
+          type: boolean
+          example: true
+
+    ActivityResult:
+      type: object
+      properties:
+        activityId:
+          type: string
+          example: 6a08ace98aade3c8d2ad4ef0
+        counted:
+          type: boolean
+          example: true
+          description: Whether this activity was counted toward the active goal.
+        reason:
+          type: string
+          nullable: true
+          enum:
+            - subject_mismatch
+            - outside_window
+            - invalid_status
+            - duplicate
+            - no_active_goal
+            - null
+          example: null
+        questionId:
+          type: string
+          example: 6a08a4d257a3c99981a7afad
+        status:
+          type: string
+          enum: [solved, correct, attempted]
+          example: solved
+        timeSpent:
+          type: integer
+          example: 120
+        timestamp:
+          type: string
+          format: date-time
+        questionSolved:
+          type: integer
+          description: Updated total questionsSolved on the active goal (only present when counted=true).
+          example: 12
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        user:
+          type: string
+          format: email
+          example: jay@example.com
+        userId:
+          type: string
+          example: 6a08ace98aade3c8d2ad4ee6
+        name:
+          type: string
+          example: Jay Gajera
+        solved:
+          type: integer
+          example: 20
+        percentage:
+          type: number
+          format: float
+          example: 20.0
+        rank:
+          type: integer
+          description: Dense rank — tied users share the same rank.
+          example: 1
+        timeSpent:
+          type: integer
+          description: Total time spent in seconds.
+          example: 3600
+
+    LeaderboardResponse:
+      type: object
+      properties:
+        goalId:
+          type: string
+          example: 6a08ace98aade3c8d2ad5001
+        totalMembers:
+          type: integer
+          example: 4
+        leaderboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        currentUser:
+          allOf:
+            - $ref: "#/components/schemas/LeaderboardEntry"
+          nullable: true
+          description: The requesting user's rank and score, present even if outside the top page.
+        offset:
+          type: integer
+          example: 0
+        limit:
+          type: integer
+          example: 10
+
+    MemberProgress:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 6a08ace98aade3c8d2ad4ee6
+        email:
+          type: string
+          format: email
+          example: jay@example.com
+        name:
+          type: string
+          example: Jay Gajera
+        solved:
+          type: integer
+          example: 10
+        totalTimeSpent:
+          type: integer
+          example: 1200
+
+    ProgressResponse:
+      type: object
+      properties:
+        goalId:
+          type: string
+          example: 6a08ace98aade3c8d2ad5001
+        title:
+          type: string
+          example: Solve 100 Math Questions
+        metric:
+          type: string
+          enum: [questionsSolved, timeSpent]
+          example: questionsSolved
+        subjectNames:
+          type: array
+          items:
+            type: string
+          example: [Mathematics, Physics]
+        totalQuestions:
+          type: integer
+          example: 100
+        questionsSolved:
+          type: integer
+          example: 45
+        progressPercentage:
+          type: number
+          format: float
+          example: 45.0
+        perMemberProgress:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberProgress"
+
+  # ── Shared error responses ─────────────────────────────────────────────────
+
+  responses:
+
+    Unauthorized:
+      description: Missing or invalid JWT token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            message: Token doesn't exist.
+            data: null
+            error:
+              code: UNAUTHORIZED
+
+    Forbidden:
+      description: Authenticated but not permitted for this action.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            message: only the creator can perform this action
+            data: null
+            error:
+              code: ONLY_CREATOR_CAN_ADD_MEMBERS
+
+    NotFound:
+      description: Requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            message: group not found
+            data: null
+            error:
+              code: GROUP_NOT_FOUND
+              details: Group id 000000000000000000000000 does not exist.
+
+    Conflict:
+      description: Resource state conflict.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            message: targetCount is required
+            data: null
+            error:
+              code: TARGET_COUNT_REQUIRED
+              details: "targetCount: targetCount is required"
+
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            message: Internal Server Error
+            data: null
+            error:
+              code: INTERNAL_SERVER_ERROR
+
+  parameters:
+    groupId:
+      name: groupId
+      in: path
+      required: true
+      description: MongoDB ObjectId of the study group.
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+      example: 6a08ace98aade3c8d2ad4eea
+
+   
+   
+   # ─── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  # ══════════════════════════════════════════════════════════════
+  # AUTH
+  # ══════════════════════════════════════════════════════════════
+
+  /auth/login:
+    get:
+      tags: [Auth]
+      summary: Get Google OAuth redirect URL
+      description: |
+        Returns the Google OAuth 2.0 authorization URL. Redirect the user to this URL
+        to initiate the login flow. Google will redirect back to the configured
+        `GOOGLE_REDIRECT_URI` with a `code` query parameter on success.
+      operationId: getGoogleLoginUrl
+      responses:
+        "200":
+          description: Google OAuth redirect URL returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          redirectUrl:
+                            type: string
+                            example: "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&redirect_uri=...&response_type=code&scope=openid%20email%20profile"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/verify-token:
+    get:
+      tags: [Auth]
+      summary: Verify JWT and rotate tokens
+      description: |
+        Verifies the provided Bearer token. If valid, issues a fresh `accessToken`
+        and `refreshToken`. Useful as a keep-alive / token refresh endpoint.
+      operationId: verifyToken
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Token is valid. Fresh tokens returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          decode:
+                            type: object
+                            description: Decoded JWT payload.
+                            properties:
+                              id:
+                                type: string
+                                example: 6a08ace98aade3c8d2ad4ee6
+                          accessToken:
+                            type: string
+                            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                          refreshToken:
+                            type: string
+                            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ══════════════════════════════════════════════════════════════
+  # USERS
+  # ══════════════════════════════════════════════════════════════
+
+  /users:
+    get:
+      tags: [Users]
+      summary: Get all users
+      description: Returns a list of all registered users. Primarily used for admin or debugging purposes.
+      operationId: getAllUsers
+      responses:
+        "200":
+          description: List of users returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ══════════════════════════════════════════════════════════════
+  # GROUPS
+  # ══════════════════════════════════════════════════════════════
+
+  /groups:
+    post:
+      tags: [Groups]
+      summary: Create a study group
+      description: |
+        Creates a new study group. The authenticated user becomes the **creator** and is
+        automatically added to the `members` list.
+
+        **Constraints:**
+        - A user can only be creator of **one group** at a time.
+        - Optional `members` must be emails of existing registered users.
+        - Duplicate member emails are silently de-duped.
+      operationId: createGroup
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Morning Problem Solvers
+                members:
+                  type: array
+                  description: Optional list of member emails to add on creation.
+                  items:
+                    type: string
+                    format: email
+                  example: [user2@example.com, user3@example.com]
+            examples:
+              with_members:
+                summary: With initial members
+                value:
+                  name: Algebra Study Group
+                  members: [user2@example.com, user3@example.com]
+              without_members:
+                summary: Solo group
+                value:
+                  name: Solo Study Group
+      responses:
+        "201":
+          description: Group created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GroupSummary"
+              example:
+                success: true
+                message: Group created successfully
+                data:
+                  groupId: 6a08ace98aade3c8d2ad4eea
+                  name: Algebra Study Group
+                  creator: jay@example.com
+                  members: [jay@example.com, user2@example.com, user3@example.com]
+                  activeGoal: null
+                  createdAt: "2025-08-29T11:00:00Z"
+                error: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Creator already owns a group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                message: creator already has a group
+                data: null
+                error:
+                  code: CREATOR_ALREADY_HAS_GROUP
+                  details: A creator can own only one group.
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /groups/{groupId}/member:
+    post:
+      tags: [Groups]
+      summary: Add a member to a group
+      description: |
+        Adds a new member to the group by email. Only the **group creator** can add members.
+
+        **Constraints:**
+        - The email must belong to an existing registered user.
+        - Cannot add a user who is already a member.
+      operationId: addGroupMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/groupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: newmember@example.com
+      responses:
+        "200":
+          description: Member added successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          groupId:
+                            type: string
+                            example: 6a08ace98aade3c8d2ad4eea
+                          members:
+                            type: array
+                            items:
+                              type: string
+                              format: email
+                            example: [jay@example.com, user2@example.com, newmember@example.com]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: User is already a member of this group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                message: User is already a member of this group
+                data: null
+                error:
+                  code: USER_ALREADY_MEMBER
+                  details: The email user2@example.com is already part of this group.
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ══════════════════════════════════════════════════════════════
+  # GOALS
+  # ══════════════════════════════════════════════════════════════
+
+  /groups/{groupId}/goal:
+    post:
+      tags: [Goals]
+      summary: Add a group goal
+      description: |
+        Sets a new active goal for the group. Only the **group creator** can add goals.
+
+        **Constraints:**
+        - A group can have only **one active goal** at a time. Returns 409 if one exists.
+        - `goalType: "deadline"` requires a `deadline` date in the future.
+        - `goalType: "recurring"` requires a `frequency` (daily / weekly / monthly). No deadline stored — the current window is computed dynamically.
+        - `subjectIds` must be valid MongoDB IDs referencing existing `Subject` documents.
+
+        **Recurring goal behaviour:**
+        Progress resets lazily at the start of each new period — no cron job required.
+        The active window is computed from `startDate + frequency` on every request.
+      operationId: addGroupGoal
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/groupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, subjectIds, targetCount, goalType]
+              properties:
+                title:
+                  type: string
+                  example: Solve 100 Math Questions
+                subjectIds:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    example: 64f1a0f3d5f5b2b1c1a00101
+                  description: MongoDB ObjectIds of subjects. Supports multiple subjects for cross-subject goals.
+                metric:
+                  type: string
+                  enum: [questionsSolved, timeSpent]
+                  default: questionsSolved
+                targetCount:
+                  type: integer
+                  minimum: 1
+                  example: 100
+                  description: Target number of questions (or seconds if metric=timeSpent).
+                goalType:
+                  type: string
+                  enum: [deadline, recurring]
+                  example: deadline
+                deadline:
+                  type: string
+                  format: date-time
+                  example: "2025-09-05T23:59:59Z"
+                  description: Required when goalType is "deadline". Must be a future date.
+                frequency:
+                  type: string
+                  enum: [daily, weekly, monthly]
+                  description: Required when goalType is "recurring".
+                startDate:
+                  type: string
+                  format: date-time
+                  description: Optional. Defaults to now (UTC).
+            examples:
+              deadline_goal:
+                summary: Deadline-based goal
+                value:
+                  title: Solve 100 Math Questions
+                  subjectIds: [64f1a0f3d5f5b2b1c1a00101]
+                  metric: questionsSolved
+                  targetCount: 100
+                  goalType: deadline
+                  deadline: "2025-09-05T23:59:59Z"
+              recurring_goal:
+                summary: Weekly recurring goal
+                value:
+                  title: Daily 10 Questions Challenge
+                  subjectIds: [64f1a0f3d5f5b2b1c1a00101, 64f1a0f3d5f5b2b1c1a00102]
+                  metric: questionsSolved
+                  targetCount: 10
+                  goalType: recurring
+                  frequency: daily
+      responses:
+        "201":
+          description: Goal created and set as active.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GoalSummary"
+              example:
+                success: true
+                message: Group goal created successfully
+                data:
+                  goalId: 6a08ace98aade3c8d2ad5001
+                  title: Solve 100 Math Questions
+                  subject: [Mathematics]
+                  metric: questionsSolved
+                  deadline: "2025-09-05T23:59:59Z"
+                  progress: 0
+                  isActive: true
+                error: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: An active goal already exists for this group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                message: active goal already exists
+                data: null
+                error:
+                  code: ACTIVE_GOAL_EXISTS
+                  details: Archive the current goal before adding a new one.
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ══════════════════════════════════════════════════════════════
+  # ACTIVITY
+  # ══════════════════════════════════════════════════════════════
+
+  /groups/{groupId}/activity:
+    post:
+      tags: [Activity]
+      summary: Record a question attempt
+      description: |
+        Logs a solved question attempt for the authenticated user in the given group.
+
+        **Counting rules** (all must pass for `counted: true`):
+        - Active goal must exist.
+        - `activityDate` must fall within the goal's effective time window.
+        - Question's subject must match one of the goal's `subjectIds`.
+        - `status` must be `"solved"` or `"correct"` (not `"attempted"`).
+        - Same user solving the same question under the same goal only counts **once** (dedup).
+
+        **Important:** Activities that fail any rule are **still stored** with `countedTowardsGoal: false`
+        and a `notCountedReason` code. The response always returns HTTP 200 with `counted: false`
+        rather than a 4xx error — no user data is discarded.
+      operationId: addGroupMemberActivity
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/groupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [questionId, status, timeSpent]
+              properties:
+                questionId:
+                  type: string
+                  description: MongoDB ObjectId of the question solved.
+                  example: 6a08a4d257a3c99981a7afad
+                status:
+                  type: string
+                  enum: [solved, correct, attempted]
+                  example: solved
+                timeSpent:
+                  type: integer
+                  minimum: 0
+                  description: Time spent on the question in seconds.
+                  example: 120
+      responses:
+        "200":
+          description: |
+            Activity recorded. Check `counted` field to know if it contributed to the goal.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ActivityResult"
+              examples:
+                counted:
+                  summary: Activity counted toward goal
+                  value:
+                    success: true
+                    message: Activity added to group goal successfully
+                    data:
+                      activityId: 6a08ace98aade3c8d2ad4ef0
+                      counted: true
+                      reason: null
+                      questionId: 6a08a4d257a3c99981a7afad
+                      status: solved
+                      timeSpent: 120
+                      timestamp: "2025-08-29T12:00:00Z"
+                      questionSolved: 12
+                    error: null
+                not_counted_subject:
+                  summary: Not counted — wrong subject
+                  value:
+                    success: true
+                    message: Activity added to group goal successfully
+                    data:
+                      activityId: 6a08ace98aade3c8d2ad4ef1
+                      counted: false
+                      reason: subject_mismatch
+                      questionId: 6a08a4d257a3c99981a7afad
+                      status: solved
+                      timeSpent: 90
+                      timestamp: "2025-08-29T12:05:00Z"
+                    error: null
+                not_counted_duplicate:
+                  summary: Not counted — already solved
+                  value:
+                    success: true
+                    message: Activity added to group goal successfully
+                    data:
+                      activityId: 6a08ace98aade3c8d2ad4ef2
+                      counted: false
+                      reason: duplicate
+                      questionId: 6a08a4d257a3c99981a7afad
+                      status: solved
+                      timeSpent: 60
+                      timestamp: "2025-08-29T13:00:00Z"
+                    error: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Question not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                message: Question not found
+                data: null
+                error:
+                  code: QUESTION_NOT_FOUND
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ══════════════════════════════════════════════════════════════
+  # PROGRESS
+  # ══════════════════════════════════════════════════════════════
+
+  /groups/{groupId}/progress:
+    get:
+      tags: [Progress]
+      summary: Get group goal progress
+      description: |
+        Returns the collective progress of the group toward the active goal.
+
+        **Performance note:** Overall progress (`questionsSolved`) is read from an atomic counter
+        on the `GroupGoal` document — O(1), no aggregation. The `perMemberProgress` breakdown
+        runs a lightweight aggregation scoped to the active goal and is cached in Redis.
+      operationId: getGroupProgress
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/groupId"
+      responses:
+        "200":
+          description: Progress summary returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ProgressResponse"
+              example:
+                success: true
+                message: Group progress retrieved successfully
+                data:
+                  goalId: 6a08ace98aade3c8d2ad5001
+                  title: Solve 100 Math Questions
+                  metric: questionsSolved
+                  subjectNames: [Mathematics]
+                  totalQuestions: 100
+                  questionsSolved: 45
+                  progressPercentage: 45.0
+                  perMemberProgress:
+                    - id: 6a08ace98aade3c8d2ad4ee6
+                      email: jay@example.com
+                      name: Jay Gajera
+                      solved: 20
+                      totalTimeSpent: 2400
+                    - id: 6a08ace98aade3c8d2ad4ee7
+                      email: user2@example.com
+                      name: User Two
+                      solved: 15
+                      totalTimeSpent: 1800
+                error: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Group not found or no active goal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                no_group:
+                  summary: Group not found
+                  value:
+                    success: false
+                    message: group not found
+                    data: null
+                    error:
+                      code: GROUP_NOT_FOUND
+                no_goal:
+                  summary: No active goal
+                  value:
+                    success: false
+                    message: No active goal found for the group
+                    data: null
+                    error:
+                      code: ACTIVE_GOAL_NOT_FOUND
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ══════════════════════════════════════════════════════════════
+  # LEADERBOARD
+  # ══════════════════════════════════════════════════════════════
+
+  /groups/{groupId}/leaderboard:
+    get:
+      tags: [Leaderboard]
+      summary: Get live leaderboard
+      description: |
+        Returns a ranked leaderboard for the group's current active goal.
+
+        **Ranking:** Uses MongoDB `$denseRank` — tied scores share the same rank
+        (e.g., two users at 45 questions are both rank 1).
+
+        **Current user:** Always included in the response (`currentUser` field) even if
+        their rank falls outside the paginated top results.
+
+        **Subject filter:** Only applies to multi-subject goals. Silently ignored for single-subject goals.
+
+        **Caching:** Results are cached in Redis per unique filter combination.
+        Cache is invalidated on every new activity submission. TTL is capped at
+        5 minutes or time remaining in the goal period, whichever is smaller.
+
+        **Response time target:** Under 500ms (may vary on free-tier cold starts).
+      operationId: getLeaderboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/groupId"
+        - name: metric
+          in: query
+          description: Contribution metric to rank by.
+          schema:
+            type: string
+            enum: [questionsSolved, timeSpent, percentage]
+            default: questionsSolved
+          example: questionsSolved
+        - name: timeWindow
+          in: query
+          description: |
+            Time range to filter activities. `all` respects the goal's own window
+            (entire deadline period or current recurring period).
+          schema:
+            type: string
+            enum: [all, day, week, month]
+            default: all
+          example: week
+        - name: subject
+          in: query
+          description: |
+            Comma-separated list of Subject ObjectIds to filter by.
+            Only effective for multi-subject goals — silently ignored otherwise.
+          schema:
+            type: string
+          example: "64f1a0f3d5f5b2b1c1a00101,64f1a0f3d5f5b2b1c1a00102"
+        - name: sortBy
+          in: query
+          description: Field to sort the leaderboard entries by.
+          schema:
+            type: string
+            enum: [questionsSolved, timeSpent, percentage, userName]
+            default: questionsSolved
+        - name: sort
+          in: query
+          description: Sort direction.
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: offset
+          in: query
+          description: Pagination offset (number of entries to skip).
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: limit
+          in: query
+          description: Number of entries per page. Max 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          example: 10
+      responses:
+        "200":
+          description: Leaderboard returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/LeaderboardResponse"
+              examples:
+                default:
+                  summary: Default leaderboard (top 10, all time, questions solved)
+                  value:
+                    success: true
+                    message: Leaderboard retrieved successfully
+                    data:
+                      goalId: 6a08ace98aade3c8d2ad5001
+                      totalMembers: 3
+                      leaderboard:
+                        - user: user2@example.com
+                          userId: 6a08ace98aade3c8d2ad4ee7
+                          name: User Two
+                          solved: 20
+                          percentage: 20.0
+                          rank: 1
+                          timeSpent: 3600
+                        - user: jay@example.com
+                          userId: 6a08ace98aade3c8d2ad4ee6
+                          name: Jay Gajera
+                          solved: 15
+                          percentage: 15.0
+                          rank: 2
+                          timeSpent: 2700
+                      currentUser:
+                        user: jay@example.com
+                        userId: 6a08ace98aade3c8d2ad4ee6
+                        name: Jay Gajera
+                        solved: 15
+                        percentage: 15.0
+                        rank: 2
+                        timeSpent: 2700
+                      offset: 0
+                      limit: 10
+                    error: null
+                tied_ranks:
+                  summary: Tied ranks (dense rank — both at rank 1)
+                  value:
+                    success: true
+                    message: Leaderboard retrieved successfully
+                    data:
+                      goalId: 6a08ace98aade3c8d2ad5001
+                      totalMembers: 3
+                      leaderboard:
+                        - user: user2@example.com
+                          userId: 6a08ace98aade3c8d2ad4ee7
+                          name: User Two
+                          solved: 45
+                          percentage: 45.0
+                          rank: 1
+                          timeSpent: 3600
+                        - user: jay@example.com
+                          userId: 6a08ace98aade3c8d2ad4ee6
+                          name: Jay Gajera
+                          solved: 45
+                          percentage: 45.0
+                          rank: 1
+                          timeSpent: 2700
+                      currentUser:
+                        user: jay@example.com
+                        userId: 6a08ace98aade3c8d2ad4ee6
+                        name: Jay Gajera
+                        solved: 45
+                        percentage: 45.0
+                        rank: 1
+                        timeSpent: 2700
+                      offset: 0
+                      limit: 10
+                    error: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Group not found or no active goal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                no_group:
+                  summary: Group not found
+                  value:
+                    success: false
+                    message: group not found
+                    data: null
+                    error:
+                      code: GROUP_NOT_FOUND
+                no_goal:
+                  summary: No active goal
+                  value:
+                    success: false
+                    message: No active goal for this group. please ask the group creator to add a new goal
+                    data: null
+                    error:
+                      code: ACTIVE_GOAL_NOT_FOUND
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+
+
+security: []

@@ -130,6 +130,9 @@ Server starts at `http://localhost:5000`.
 
 ---
 
+## Testing API Endpoints
+- Use the swagger.yaml file , copy its content and paste it in [Swagger Editor](https://editor.swagger.io/) to visualize and test the API endpoints interactively.
+
 ## Deployment
 
 **Live API:** `https://squadrank.vercel.app`
