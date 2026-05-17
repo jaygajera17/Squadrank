@@ -170,3 +170,23 @@ Set the same environment variables in your host's dashboard and point the start 
 **Goal editing and leaderboard invalidation.** The spec supports editing deadline and frequency. Changing either should flush all leaderboard cache keys for that goal (already handled by `invalidateGoalCache`) and potentially recompute `questionsSolved` if the new window excludes previously counted activities.
 
 **Persistence layer for Redis.** The current Upstash setup uses REST-based access. For sub-100ms leaderboard targets at scale, a persistent Redis connection (Upstash with connection pooling or a self-hosted instance) would reduce per-request overhead significantly.
+
+
+### Leaderboard — Redis Sorted Sets (ZSET)
+ 
+**Current approach:** Every leaderboard request runs a `$setWindowFields` + `$facet` aggregation across `GroupMemberActivity`. With hundreds of thousands of activity records this will breach the 500ms target.
+**Planned approach:** Replace MongoDB aggregation with Redis Sorted Sets — the standard data structure for live leaderboards at scale (used by Discord, Steam, gaming platforms).
+ 
+```
+Write path (activity submit):
+  ZINCRBY leaderboard:{goalId}:all          1 {userId}   → O(log N)
+  ZINCRBY leaderboard:{goalId}:week:2025-W35 1 {userId}  → O(log N)
+  ZINCRBY leaderboard:{goalId}:day:2025-08-29 1 {userId} → O(log N)
+ 
+Read path (leaderboard fetch):
+  ZREVRANGE  leaderboard:{goalId}:all 0 9 WITHSCORES  → paginated top 10, O(log N + M)
+  ZREVRANK   leaderboard:{goalId}:all {userId}         → current user rank, O(log N)
+  ZSCORE     leaderboard:{goalId}:all {userId}         → current user score, O(1)
+```
+ 
+This reduces leaderboard read latency from ~300ms (MongoDB aggregation) to ~3ms (Redis ZSET) regardless of activity volume. Time-windowed ZSET keys carry a TTL and expire automatically — no manual cleanup needed. On recurring goal period reset, the relevant ZSET keys are deleted and rebuilt from the next period's activity.
